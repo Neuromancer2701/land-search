@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Score properties from matching_properties_3800_zestimates.csv.
+Score properties from matching_properties_3800_zestimates_mailing.csv.
 
 Scoring system:
   Sq Ft:    1800-2499 = 10 pts | 2500-2999 = 14 pts | 3000+ = 17 pts
   Commute:  <15 min = 15 pts | 15-25 min = 10 pts | >25 min = 5 pts  (applied to BOTH destinations)
   Acreage:  1 pt per acre (raw value)
   Zestimate: <$425k = 20 pts | $425k-$550k = 10 pts | >$550k = 0 pts
+  Non-owner-occupied: +50 pts when mailing address ≠ property address
 
 Outputs a scored CSV with a scoring key table to the right.
 """
@@ -16,7 +17,7 @@ import sys
 
 os.chdir('/home/count_zero/Repos/House_Search_GIS')
 
-INPUT_CSV  = 'matching_properties_3800_zestimates.csv'
+INPUT_CSV  = 'matching_properties_3800_zestimates_mailing.csv'
 OUTPUT_CSV = 'matching_properties_scored.csv'
 
 # ── Scoring thresholds (edit these to retune the model) ───────────────────────
@@ -38,6 +39,7 @@ ZESTIMATE_TIERS = [
     (999_999_999, 0),
 ]
 ACRE_PTS_PER_ACRE = 1   # multiply by raw acreage
+NON_OWNER_OCCUPIED_PTS = 50   # mailing address differs from property address
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -71,12 +73,15 @@ def score_row(row):
     acreage  = safe_float(row['Acreage'])
     zest     = safe_float(row['Zestimate'])
 
+    occupied = (row.get('Owner Occupied') or '').strip().upper()
+
     s_sqft  = hi_tier_score(sqft, SQFT_TIERS)
     s_c1    = lo_tier_score(commute1, COMMUTE_TIERS) if commute1 > 0 else 0
     s_c2    = lo_tier_score(commute2, COMMUTE_TIERS) if commute2 > 0 else 0
     s_acres = round(acreage * ACRE_PTS_PER_ACRE, 1)
     s_zest  = lo_tier_score(zest, ZESTIMATE_TIERS) if zest > 0 else 0
-    s_total = s_sqft + s_c1 + s_c2 + s_acres + s_zest
+    s_occ   = NON_OWNER_OCCUPIED_PTS if occupied == 'N' else 0
+    s_total = s_sqft + s_c1 + s_c2 + s_acres + s_zest + s_occ
 
     return {
         'SqFt Score':              s_sqft,
@@ -84,6 +89,7 @@ def score_row(row):
         'Commute Fleetwood Score': s_c2,
         'Acreage Score':           s_acres,
         'Zestimate Score':         s_zest,
+        'Non-Owner-Occupied Score': s_occ,
         'TOTAL SCORE':             s_total,
     }
 
@@ -113,12 +119,18 @@ KEY_ROWS = [
     ['',            'Zestimate',         '$425k - $550k',  '10',     ''],
     ['',            'Zestimate',         '> $550,000',     '0',      ''],
     ['',            '',                  '',               '',       ''],
+    ['',            '── OCCUPANCY ──',   '',               '',       'Bedford & Amherst only; Campbell = Unknown'],
+    ['',            'Non-owner-occupied','mailing ≠ situs','50',     'Owner Occupied = N'],
+    ['',            'Owner-occupied',    'mailing = situs','0',      'Owner Occupied = Y'],
+    ['',            'Unknown occupancy', '',               '0',      'Campbell or unmatched'],
+    ['',            '',                  '',               '',       ''],
     ['',            '── MAX SCORES ──',  '',               '',       ''],
     ['',            'Sq Ft max',         '3000+',          '17',     ''],
     ['',            'Commute max (×2)',  '< 15 min each',  '30',     ''],
     ['',            'Acreage max',       '25 acres',       '25',     ''],
     ['',            'Zestimate max',     '< $425k',        '20',     ''],
-    ['',            'Theoretical max',   '',               '92',     '(17+30+25+20)'],
+    ['',            'Non-owner max',     'mailing ≠ situs','50',     ''],
+    ['',            'Theoretical max',   '',               '142',    '(17+30+25+20+50)'],
 ]
 
 EMPTY_KEY = ['', '', '', '', '']
@@ -137,6 +149,7 @@ def main():
         'Commute Fleetwood Score',
         'Acreage Score',
         'Zestimate Score',
+        'Non-Owner-Occupied Score',
         'TOTAL SCORE',
     ]
     key_fields = ['', 'KEY Category', 'KEY Threshold', 'KEY Points', 'KEY Notes']
