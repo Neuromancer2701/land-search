@@ -1,192 +1,207 @@
-# Virginia Property Search - GIS Data
+# Virginia Property Search — House Search GIS
 
-This directory contains GIS parcel data for property search in Virginia counties.
+GIS-backed property search for **Bedford**, **Campbell**, and **Amherst** counties (Lynchburg, VA area). The pipeline downloads county parcel data, filters by lot/house criteria and commute time, enriches with Zillow estimates and owner-occupancy, then scores and ranks candidates.
 
-## Counties Covered
+## Current results
 
-### 1. Bedford County
-- **Data Source**: [Bedford County GIS Open Data Portal](https://geohub-bedfordvagis.opendata.arcgis.com/)
-- **REST API**: `https://webgis.bedfordcountyva.gov/arcgis/rest/services/OpenData/OpenDataProperty/MapServer/0`
-- **Total Parcels**: ~50,688
-- **Directory**: `bedford/`
-- **File**: `bedford/parcels_complete.geojson`
-- **Status**: ✓ Downloaded
-- **Last Updated**: February 2026
+| Metric | Value |
+|--------|--------|
+| Shortlist size | ~295 properties |
+| Counties | Bedford, Campbell, Amherst |
+| Commute destinations | 2424 Rivermont Ave; 122 Fleetwood Dr (Lynchburg) |
+| Max commute | ≤ 25 minutes to **both** destinations |
+| Lot size | 5–25 acres |
+| House | ≥ 1800 sq ft, ≥ 3 bedrooms, ≥ 2 baths (where baths available) |
 
-### 2. Campbell County
-- **Data Source**: [Campbell County GIS Hub](https://data1-campbellva.hub.arcgis.com/)
-- **REST API**: `https://gis.co.campbell.va.us/arcgis/rest/services/Open_Data/Parcel_Lines/MapServer/0`
-- **Total Parcels**: ~37,826
-- **Directory**: `campbell/`
-- **File**: `campbell/parcels_complete.geojson`
-- **Status**: ✓ Downloaded
-- **Last Updated**: February 2026
-
-### 3. Amherst County
-- **Data Source**: [Timmons Group GIS Portal](https://www.amherstgis.timmons.com/)
-- **Public REST API**: ❌ Not Available
-- **Total Parcels**: ~27,182
-- **Status**: ⚠️ No public API available
-
-**Amherst County Data Access Options:**
-
-Since Amherst County does not provide a public REST API for bulk downloads, you have the following options:
-
-1. **Contact County Directly**
-   - Planning and Zoning Department: (434) 946-9303
-   - Request parcel data export
-
-2. **Third-Party Data Vendors**
-   - **Regrid** (Free tier available): https://app.regrid.com/us/va/amherst
-   - **Dynamo Spatial**: https://www.dynamospatial.com/c/amherst-county-va/parcel-data
-   - **Mapping Solutions GIS**: https://www.mappingsolutionsgis.com/amherst-county-virginia-gis-parcel-data/
-   - **Equator Studios**: https://gis.equatorstudios.com/virginia_amherst/
-
-3. **Manual Export from GIS Viewer**
-   - Use the web interface at https://www.amherstgis.timmons.com/
-   - May require contacting the vendor for export capabilities
-
-## Data Format
-
-All downloaded parcel data is in **GeoJSON** format, which is compatible with:
-- QGIS
-- ArcGIS
-- Python (GeoPandas, Shapely)
-- JavaScript mapping libraries (Leaflet, Mapbox, OpenLayers)
-- PostGIS and other spatial databases
-
-## File Structure
-
-```
-House_Search_GIS/
-├── README.md                      # This file
-├── download_parcels.sh            # Download script
-├── download_parcels.py            # Alternative Python download script
-├── bedford/
-│   └── parcels_complete.geojson   # Bedford County parcels
-├── campbell/
-│   └── parcels_complete.geojson   # Campbell County parcels
-└── amherst/                       # (To be added when data is obtained)
-```
-
-## Using the Data
-
-### View in QGIS
-1. Open QGIS
-2. Layer → Add Layer → Add Vector Layer
-3. Select the GeoJSON file
-4. The parcels will display on the map
-
-### Python Example
-```python
-import geopandas as gpd
-
-# Load parcels
-bedford = gpd.read_file('bedford/parcels_complete.geojson')
-campbell = gpd.read_file('campbell/parcels_complete.geojson')
-
-# Filter by criteria (example)
-large_parcels = bedford[bedford.geometry.area > 43560]  # > 1 acre in sq ft
-
-# Spatial query (example)
-from shapely.geometry import Point
-point = Point(-79.5, 37.3)
-nearby = bedford[bedford.distance(point) < 0.01]
-```
-
-### JavaScript/Web Mapping Example
-```javascript
-// Load with Leaflet
-fetch('bedford/parcels_complete.geojson')
-  .then(response => response.json())
-  .then(data => {
-    L.geoJSON(data, {
-      onEachFeature: (feature, layer) => {
-        layer.bindPopup(feature.properties.OWNER);
-      }
-    }).addTo(map);
-  });
-```
-
-## Downloading/Updating Data
-
-To refresh the data or download again:
-
-```bash
-./download_parcels.sh campbell   # Download Campbell County
-./download_parcels.sh bedford    # Download Bedford County
-./download_parcels.sh            # Download all available counties
-```
-
-## Data Attributes
-
-Each parcel typically includes:
-- **Parcel ID/PIN**: Unique identifier
-- **Owner Information**: Owner name, mailing address
-- **Location**: Street address
-- **Tax Information**: Assessment values, tax map reference
-- **Land Use**: Zoning, land use classification
-- **Geometry**: Polygon boundaries
-- **Acreage**: Land area
-
-(Specific attributes vary by county - use QGIS or `ogrinfo` to inspect)
-
-## Coordinate Reference System
-
-- **Bedford County**: EPSG:2284 (NAD83 / Virginia South, US Survey Feet)
-- **Campbell County**: EPSG:2284 (NAD83 / Virginia South, US Survey Feet)
-
-To reproject to WGS84 (lat/lon) for web mapping:
-```bash
-ogr2ogr -t_srs EPSG:4326 output.geojson input.geojson
-```
-
-## Resources
-
-### Official GIS Portals
-- [Bedford County GIS Open Data Portal](https://geohub-bedfordvagis.opendata.arcgis.com/)
-- [Campbell County GIS Hub](https://data1-campbellva.hub.arcgis.com/)
-- [Amherst County GIS](https://www.amherstgis.timmons.com/)
-
-### Virginia State Resources
-- [Virginia Geographic Information Network (VGIN)](https://vgin.vdem.virginia.gov/)
-- [Virginia Open Data Portal](https://data.virginia.gov/)
-
-## Next Steps
-
-To use this data for property searching, you'll need to:
-
-1. **Define Your Search Criteria**
-   - Acreage requirements
-   - Price range
-   - Zoning requirements
-   - Distance from roads/utilities
-   - Topography preferences
-
-2. **Obtain Additional Layers** (if needed)
-   - Roads/highways
-   - Utilities (water, sewer, electric)
-   - Topography/elevation data
-   - Flood zones
-   - Conservation easements
-
-3. **Set Up Analysis Tools**
-   - Install QGIS or use Python with GeoPandas
-   - Create spatial queries and filters
-   - Visualize results on maps
-
-4. **Cross-Reference with Real Estate Data**
-   - Zillow, Realtor.com listings
-   - County assessor databases
-   - For-sale-by-owner listings
-
-## Contact
-
-For questions about:
-- **Bedford County GIS**: gis@bedfordcountyva.gov | (540) 587-5678
-- **Campbell County GIS**: gisweb@campbellcountyva.gov
-- **Amherst County GIS**: Planning & Zoning (434) 946-9303
+**Primary scored output:** `matching_properties_scored.csv`  
+**Per-county rankings:** `scored_by_county/<county>.csv`
 
 ---
 
-*Last updated: February 6, 2026*
+## Pipeline overview
+
+```
+Download parcels / improvements
+        │
+        ▼
+Filter by acreage, sq ft, beds, baths   (filter_properties.py, filter_amherst.py)
+        │
+        ▼
+Commute filter via OSRM                 (commute_filter.py → matching_properties.csv)
+        │
+        ▼
+Zillow Zestimate / rent estimate        (zillow_zestimate.py)
+        │
+        ▼
+Mailing address + owner-occupied flag   (enrich_mailing_address.py)
+        │
+        ▼
+Score & rank (overall + by county)      (score_properties.py)
+```
+
+### Typical file chain
+
+| Stage | File |
+|-------|------|
+| After commute filter | `matching_properties.csv` (often renamed `matching_properties_3800.csv`) |
+| After Zestimates | `matching_properties_3800_zestimates.csv` |
+| After mailing enrich | `matching_properties_3800_zestimates_mailing.csv` |
+| After scoring | `matching_properties_scored.csv` + `scored_by_county/*.csv` |
+
+Checked-in deliverables usually start from the zestimate/mailing CSVs so you can re-score without re-scraping Zillow.
+
+---
+
+## Scoring
+
+| Category | Rule | Points |
+|----------|------|--------|
+| Sq ft | 1800–2499 / 2500–2999 / 3000+ | 10 / 14 / 17 |
+| Commute (each destination) | &lt;15 min / 15–25 / &gt;25 | 15 / 10 / 5 |
+| Acreage | per acre | 1 × acres |
+| Zestimate | &lt;$425k / $425k–$550k / &gt;$550k | 20 / 10 / 0 |
+| Non-owner-occupied | mailing address ≠ situs (`Owner Occupied = N`) | **+50** (optional) |
+
+Theoretical max with non-owner bonus: **142** (17 + 30 + 25 + 20 + 50).
+
+### Known data caveats
+
+- **Campbell:** bathroom counts are not in source data (bath filter skipped). Owner occupancy is **Unknown** (no separate situs vs mailing), so the non-owner bonus never applies there.
+- **Bedford:** tax assessment is often blank in the shortlist; Zestimate is the price signal used in scoring.
+- **Amherst:** parcels come from a public ArcGIS FeatureServer (see `DATA_SOURCES.md`).
+
+---
+
+## Scoring: usage
+
+```bash
+# Default: non-owner bonus ON, overall + per-county rankings
+python3 score_properties.py
+
+# Disable the +50 non-owner-occupied bonus
+python3 score_properties.py --no-non-owner-bonus
+
+# Custom paths
+python3 score_properties.py \
+  -i matching_properties_3800_zestimates_mailing.csv \
+  -o matching_properties_scored.csv \
+  --by-county-dir scored_by_county
+
+# Overall ranking only (skip county split files)
+python3 score_properties.py --no-by-county
+```
+
+### CLI flags
+
+| Flag | Description |
+|------|-------------|
+| `-i` / `--input` | Input CSV (default: `matching_properties_3800_zestimates_mailing.csv`) |
+| `-o` / `--output` | Overall ranked CSV (default: `matching_properties_scored.csv`) |
+| `--no-non-owner-bonus` | Turn off the +50 non-owner-occupied points |
+| `--by-county` | Write per-county ranked CSVs (default: **on**) |
+| `--no-by-county` | Skip per-county files |
+| `--by-county-dir` | Output directory for county files (default: `scored_by_county`) |
+
+Each output includes a **Rank** column (1 = best within that file), component scores, **TOTAL SCORE**, and a scoring-key table on the right-hand columns.
+
+---
+
+## Counties & data
+
+| County | Parcels (approx.) | Source | Local data |
+|--------|-------------------|--------|------------|
+| Bedford | ~50,688 | [Open Data portal](https://geohub-bedfordvagis.opendata.arcgis.com/) | `bedford/parcels_complete.geojson`, `bedford/improvements.json` |
+| Campbell | ~37,826 | [GIS Hub](https://data1-campbellva.hub.arcgis.com/) | `campbell/parcels_complete.geojson`, `campbell/improvements.csv` |
+| Amherst | ~26,000+ | ArcGIS FeatureServer (Timmons / county) | `amherst/parcels_complete.geojson`, `amherst/parcels_with_assessment.geojson` |
+
+Large GeoJSON files use **Git LFS**. Details and REST endpoints: [`DATA_SOURCES.md`](DATA_SOURCES.md).
+
+### Refresh downloads
+
+```bash
+./download_parcels.sh bedford    # or campbell, or no arg for both
+python3 download_improvements.py # Bedford improvements table
+python3 download_campbell.py     # Campbell parcels (Python path)
+python3 download_amherst.py      # Amherst parcels + assessment fields
+```
+
+---
+
+## Full regenerate (when needed)
+
+Dependencies: Python 3, `curl`; for Zestimates only: `pip install curl_cffi`.
+
+```bash
+# 1. Filter Bedford + Campbell (acreage / house criteria)
+python3 filter_properties.py          # → filtered_properties.json
+
+# 2. Commute filter (OSRM + Nominatim)
+python3 commute_filter.py             # → matching_properties.csv
+
+# 3. Append Amherst (same criteria + commute)
+python3 filter_amherst.py             # appends to matching_properties.csv
+
+# 4. Zestimates (slow; uses browser impersonation)
+#    Point INPUT_CSV at your matching file first if needed
+python3 zillow_zestimate.py
+
+# 5. Mailing / owner-occupied
+python3 enrich_mailing_address.py
+
+# 6. Score
+python3 score_properties.py
+python3 score_properties.py --no-non-owner-bonus -o matching_properties_scored_no_nonowner.csv
+```
+
+Commute uses the public OSRM demo server and OpenStreetMap Nominatim—be polite with rate limits if re-running at scale.
+
+---
+
+## Project layout
+
+```
+House_Search_GIS/
+├── README.md
+├── DATA_SOURCES.md
+├── download_parcels.sh / download_parcels.py
+├── download_campbell.py / download_campbell.sh
+├── download_amherst.py
+├── download_improvements.py
+├── filter_properties.py          # Bedford + Campbell criteria
+├── commute_filter.py             # Drive-time filter → matching_properties.csv
+├── filter_amherst.py             # Amherst criteria + commute, appends CSV
+├── zillow_zestimate.py
+├── enrich_mailing_address.py
+├── score_properties.py           # Rank overall + by county
+├── bedford/  campbell/  amherst/ # Parcel / improvement source data
+├── matching_properties_3800_zestimates.csv
+├── matching_properties_3800_zestimates_mailing.csv
+├── matching_properties_scored.csv
+└── scored_by_county/             # e.g. bedford.csv, campbell.csv, amherst.csv
+```
+
+---
+
+## View parcels in QGIS / Python
+
+```bash
+# Reproject to WGS84 if needed (source CRS is often EPSG:2284)
+ogr2ogr -t_srs EPSG:4326 out.geojson bedford/parcels_complete.geojson
+```
+
+```python
+import geopandas as gpd
+bedford = gpd.read_file('bedford/parcels_complete.geojson')
+```
+
+---
+
+## Contacts (county GIS)
+
+- **Bedford:** gis@bedfordcountyva.gov · (540) 587-5678  
+- **Campbell:** gisweb@campbellcountyva.gov  
+- **Amherst:** Planning & Zoning · (434) 946-9303  
+
+---
+
+*Documentation updated: July 2026*

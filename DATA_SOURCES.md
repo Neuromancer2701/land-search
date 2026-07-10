@@ -116,14 +116,17 @@ curl "https://gis.co.campbell.va.us/arcgis/rest/services/Open_Data/Parcel_Lines/
 - **Address**: 100 Goodwin St, P.O. Box 719, Amherst, VA 24521
 
 ### Data Access Status
-⚠️ **No Public REST API Available**
+✅ **In-repo download works** via ArcGIS FeatureServer layer 30 (see `download_amherst.py`). The public Timmons web viewer is still the primary map UI; bulk open-data documentation is limited.
 
-The Amherst County GIS portal is hosted by Timmons Group and does NOT provide public REST API endpoints for bulk data download. The system is viewer-only through the web interface.
+**FeatureServer query (used by this project):**
+```
+https://services8.arcgis.com/TvqqWejphpVuqRec/arcgis/rest/services/Amherst_WL_P/FeatureServer/30/query
+```
 
-### Alternative Data Sources
+### Alternative / fallback data sources
 
-#### 1. **Direct County Contact** (Recommended)
-Contact the Planning and Zoning Department to request parcel data:
+#### 1. **Direct County Contact**
+Contact the Planning and Zoning Department if the FeatureServer is unavailable:
 - Phone: (434) 946-9303
 - They may be able to provide data exports directly
 
@@ -168,9 +171,17 @@ Contact the Planning and Zoning Department to request parcel data:
 
 | County | Parcels | API Access | Download Status |
 |--------|---------|------------|-----------------|
-| Bedford | ~50,688 | ✅ Public REST API | ⏳ In Progress |
-| Campbell | ~37,826 | ✅ Public REST API | ⏳ In Progress |
-| Amherst | ~27,182 | ❌ No public API | ⚠️ Requires alternative source |
+| Bedford | ~50,688 | ✅ Public REST API | ✅ Downloaded (`bedford/parcels_complete.geojson`, `bedford/improvements.json`) |
+| Campbell | ~37,826 | ✅ Public REST API | ✅ Downloaded (`campbell/parcels_complete.geojson`, `campbell/improvements.csv`) |
+| Amherst | ~26,000+ | ✅ FeatureServer used in-repo | ✅ Downloaded (`amherst/parcels_complete.geojson`, `amherst/parcels_with_assessment.geojson`) |
+
+**Amherst note:** The Timmons web viewer does not advertise a bulk open-data hub like Bedford/Campbell, but parcel + assessment features are available via an ArcGIS FeatureServer used by `download_amherst.py`:
+
+```
+https://services8.arcgis.com/TvqqWejphpVuqRec/arcgis/rest/services/Amherst_WL_P/FeatureServer/30/query
+```
+
+If that endpoint changes, fall back to the county contact or third-party vendors listed below.
 
 ---
 
@@ -207,4 +218,4 @@ When using this data, please attribute:
 
 ---
 
-*Last Updated: February 6, 2026*
+*Last Updated: July 2026*
