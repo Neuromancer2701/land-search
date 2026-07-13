@@ -6,7 +6,7 @@ GIS-backed property search for **Bedford**, **Campbell**, and **Amherst** counti
 
 | Metric | Value |
 |--------|--------|
-| Shortlist size | ~295 properties |
+| Shortlist size | ~285 properties (after excluding already-contacted) |
 | Counties | Bedford, Campbell, Amherst |
 | Commute destinations | 2424 Rivermont Ave; 122 Fleetwood Dr (Lynchburg) |
 | Max commute | ≤ 25 minutes to **both** destinations |
@@ -58,11 +58,16 @@ Checked-in deliverables usually start from the zestimate/mailing CSVs so you can
 |----------|------|--------|
 | Sq ft | 1800–2499 / 2500–2999 / 3000+ | 10 / 14 / 17 |
 | Commute (each destination) | &lt;15 min / 15–25 / &gt;25 | 15 / 10 / 5 |
+| Dual commute bonus | **both** destinations &lt; 20 min | **+20** |
 | Acreage | per acre | 1 × acres |
 | Zestimate | &lt;$425k / $425k–$550k / &gt;$550k | 20 / 10 / 0 |
 | Non-owner-occupied | mailing address ≠ situs (`Owner Occupied = N`) | **+50** (optional) |
 
-Theoretical max with non-owner bonus: **142** (17 + 30 + 25 + 20 + 50).
+Theoretical max with non-owner bonus: **162** (17 + 30 + 20 + 25 + 20 + 50).
+
+### Already-contacted exclusions
+
+Addresses in `EXCLUDED_ADDRESSES` inside `score_properties.py` are dropped from scored output (letters already sent). Edit that list and re-run the scorer to update.
 
 ### Known data caveats
 

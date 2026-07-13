@@ -5,10 +5,13 @@ Score properties from the enriched mailing/zestimate CSV.
 Scoring system:
   Sq Ft:    1800-2499 = 10 pts | 2500-2999 = 14 pts | 3000+ = 17 pts
   Commute:  <15 min = 15 pts | 15-25 min = 10 pts | >25 min = 5 pts  (both destinations)
+  Dual commute bonus: +20 pts when BOTH destinations are under 20 minutes
   Acreage:  1 pt per acre (raw value)
   Zestimate: <$425k = 20 pts | $425k-$550k = 10 pts | >$550k = 0 pts
   Non-owner-occupied: +50 pts when mailing address ≠ property address
                       (disable with --no-non-owner-bonus)
+
+Already-contacted addresses in EXCLUDED_ADDRESSES are dropped from output.
 
 Outputs:
   - Overall ranked CSV (default: matching_properties_scored.csv)
@@ -47,13 +50,42 @@ ZESTIMATE_TIERS = [
 ]
 ACRE_PTS_PER_ACRE = 1
 NON_OWNER_OCCUPIED_PTS = 50
+# Both destinations under this many minutes → dual-commute bonus
+DUAL_COMMUTE_MAX_MIN = 20
+DUAL_COMMUTE_BONUS_PTS = 20
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Already sent letters — street line only (city/zip optional). Matching is
+# house-number + normalized street tokens (abbrev/spelling tolerant).
+EXCLUDED_ADDRESSES = [
+    '5309 S Amherst Hwy',       # user list: "309 S. Amherst Hwy" → 5309 in data
+    '272 Thomas Rd',
+    '498 Historic Riverview Way',
+    '190 Hidden View Stable Ln',
+    '2615 Hawkins Mill Road',
+    '218 Maple Dr',
+    '1586 Hunterland Road',
+    '3490 S Amherst Hwy',
+    '473 Kings Rd',
+    '145 Blue Bird Ln',
+]
+
+STREET_ABBR = {
+    'STREET': 'ST', 'ROAD': 'RD', 'AVENUE': 'AVE', 'BOULEVARD': 'BLVD',
+    'DRIVE': 'DR', 'LANE': 'LN', 'COURT': 'CT', 'CIRCLE': 'CIR',
+    'HIGHWAY': 'HWY', 'PARKWAY': 'PKWY', 'PLACE': 'PL', 'TERRACE': 'TER',
+    'TRAIL': 'TRL', 'WAY': 'WAY',
+    'NORTH': 'N', 'SOUTH': 'S', 'EAST': 'E', 'WEST': 'W',
+    # Truncated GIS spellings
+    'RIVERVIE': 'RIVERVIEW', 'STABL': 'STABLE',
+}
 
 SCORE_FIELDS = [
     'Rank',
     'SqFt Score',
     'Commute Rivermont Score',
     'Commute Fleetwood Score',
+    'Dual Commute Bonus',
     'Acreage Score',
     'Zestimate Score',
     'Non-Owner-Occupied Score',
@@ -86,6 +118,21 @@ def lo_tier_score(value, tiers):
     return tiers[-1][1]
 
 
+def normalize_street_key(address: str) -> str:
+    """Normalize to 'HOUSE_NUM STREET TOKENS' for exclusion matching."""
+    if not address:
+        return ''
+    street = address.split(',', 1)[0].strip().upper()
+    street = re.sub(r'[.#]', ' ', street)
+    street = re.sub(r'\s+', ' ', street).strip()
+    parts = [STREET_ABBR.get(p, p) for p in street.split(' ') if p]
+    return ' '.join(parts)
+
+
+def is_excluded(address: str, excluded_keys: set[str]) -> bool:
+    return normalize_street_key(address) in excluded_keys
+
+
 def score_row(row, non_owner_bonus: bool):
     sqft = safe_float(row['Sq Ft'])
     commute1 = safe_float(row['Commute to 2424 Rivermont Ave (min)'])
@@ -97,15 +144,23 @@ def score_row(row, non_owner_bonus: bool):
     s_sqft = hi_tier_score(sqft, SQFT_TIERS)
     s_c1 = lo_tier_score(commute1, COMMUTE_TIERS) if commute1 > 0 else 0
     s_c2 = lo_tier_score(commute2, COMMUTE_TIERS) if commute2 > 0 else 0
+    s_dual = (
+        DUAL_COMMUTE_BONUS_PTS
+        if commute1 > 0 and commute2 > 0
+        and commute1 < DUAL_COMMUTE_MAX_MIN
+        and commute2 < DUAL_COMMUTE_MAX_MIN
+        else 0
+    )
     s_acres = round(acreage * ACRE_PTS_PER_ACRE, 1)
     s_zest = lo_tier_score(zest, ZESTIMATE_TIERS) if zest > 0 else 0
     s_occ = (NON_OWNER_OCCUPIED_PTS if occupied == 'N' else 0) if non_owner_bonus else 0
-    s_total = s_sqft + s_c1 + s_c2 + s_acres + s_zest + s_occ
+    s_total = s_sqft + s_c1 + s_c2 + s_dual + s_acres + s_zest + s_occ
 
     return {
         'SqFt Score': s_sqft,
         'Commute Rivermont Score': s_c1,
         'Commute Fleetwood Score': s_c2,
+        'Dual Commute Bonus': s_dual,
         'Acreage Score': s_acres,
         'Zestimate Score': s_zest,
         'Non-Owner-Occupied Score': s_occ,
@@ -121,11 +176,13 @@ def build_key_rows(non_owner_bonus: bool):
         if non_owner_bonus
         else 'DISABLED (--no-non-owner-bonus)'
     )
-    theoretical = 17 + 30 + 25 + 20 + (NON_OWNER_OCCUPIED_PTS if non_owner_bonus else 0)
+    non_owner_max = NON_OWNER_OCCUPIED_PTS if non_owner_bonus else 0
+    # sqft + commute×2 + dual + acres + zest + non-owner
+    theoretical = 17 + 30 + DUAL_COMMUTE_BONUS_PTS + 25 + 20 + non_owner_max
     theoretical_parts = (
-        f'(17+30+25+20+{NON_OWNER_OCCUPIED_PTS})'
+        f'(17+30+{DUAL_COMMUTE_BONUS_PTS}+25+20+{non_owner_max})'
         if non_owner_bonus
-        else '(17+30+25+20)'
+        else f'(17+30+{DUAL_COMMUTE_BONUS_PTS}+25+20)'
     )
 
     return [
@@ -139,6 +196,8 @@ def build_key_rows(non_owner_bonus: bool):
         ['', 'Commute', '< 15 min', '15', ''],
         ['', 'Commute', '15 - 25 min', '10', ''],
         ['', 'Commute', '> 25 min', '5', ''],
+        ['', 'Dual commute bonus', f'both < {DUAL_COMMUTE_MAX_MIN} min',
+         str(DUAL_COMMUTE_BONUS_PTS), 'Both destinations under threshold'],
         ['', '', '', '', ''],
         ['', '── ACREAGE ──', '', '', ''],
         ['', 'Acreage', 'per acre', '1', 'Raw acreage value'],
@@ -156,6 +215,8 @@ def build_key_rows(non_owner_bonus: bool):
         ['', '── MAX SCORES ──', '', '', ''],
         ['', 'Sq Ft max', '3000+', '17', ''],
         ['', 'Commute max (×2)', '< 15 min each', '30', ''],
+        ['', 'Dual commute max', f'both < {DUAL_COMMUTE_MAX_MIN} min',
+         str(DUAL_COMMUTE_BONUS_PTS), ''],
         ['', 'Acreage max', '25 acres', '25', ''],
         ['', 'Zestimate max', '< $425k', '20', ''],
         ['', 'Non-owner max', 'mailing ≠ situs', non_owner_pts, non_owner_note],
@@ -275,16 +336,41 @@ def main(argv=None):
         src_fieldnames = list(reader.fieldnames or [])
         rows = list(reader)
 
+    excluded_keys = {normalize_street_key(a) for a in EXCLUDED_ADDRESSES}
+    kept = []
+    removed = []
+    for row in rows:
+        if is_excluded(row.get('Address', ''), excluded_keys):
+            removed.append(row.get('Address', ''))
+        else:
+            kept.append(row)
+
+    if removed:
+        print(f"Excluded {len(removed)} already-contacted address(es):")
+        for addr in removed:
+            print(f"  - {addr}")
+    else:
+        print('No excluded addresses matched the input list.')
+
+    input_keys = {normalize_street_key(r.get('Address', '')) for r in rows}
+    for ex in EXCLUDED_ADDRESSES:
+        if normalize_street_key(ex) not in input_keys:
+            print(f"WARNING: exclusion not found in input: {ex}", file=sys.stderr)
+
     key_rows = build_key_rows(non_owner_bonus)
-    scored_rows = [(row, score_row(row, non_owner_bonus)) for row in rows]
+    scored_rows = [(row, score_row(row, non_owner_bonus)) for row in kept]
     scored_rows.sort(key=lambda x: x[1]['TOTAL SCORE'], reverse=True)
 
     write_scored_csv(output_path, src_fieldnames, scored_rows, key_rows)
 
     bonus_label = 'ON' if non_owner_bonus else 'OFF'
-    print(f"Scored {len(scored_rows)} properties → {output_path}")
+    dual_n = sum(1 for _, s in scored_rows if s['Dual Commute Bonus'] > 0)
+    print(f"Scored {len(scored_rows)} properties → {output_path}"
+          f" ({len(removed)} excluded)")
     print(f"Non-owner-occupied bonus: {bonus_label}"
           f"{f' (+{NON_OWNER_OCCUPIED_PTS} pts)' if non_owner_bonus else ''}")
+    print(f"Dual-commute bonus (+{DUAL_COMMUTE_BONUS_PTS} if both "
+          f"<{DUAL_COMMUTE_MAX_MIN} min): {dual_n} properties qualify")
     print_top(scored_rows, 'Overall ranking')
 
     if args.by_county:
